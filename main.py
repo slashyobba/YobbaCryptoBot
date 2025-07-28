@@ -24,6 +24,7 @@ async def send_report():
         await bot.send_message(CHANNEL_ID, message, parse_mode='Markdown')
     except Exception as e:
         logging.exception("Ошибка при отправке отчета: %s", e)
+        await bot.send_message(CHANNEL_ID, f"❌ Ошибка: {e}")
 
 async def scheduler():
     while True:
