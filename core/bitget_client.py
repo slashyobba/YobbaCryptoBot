@@ -1,25 +1,32 @@
-import requests
 import os
 import time
 import hmac
 import hashlib
 import base64
+import requests
 
 API_KEY = os.getenv("BITGET_API_KEY")
 API_SECRET = os.getenv("BITGET_API_SECRET")
-API_PASSPHRASE = os.getenv("BITGET_PASSPHRASE")
+API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
-def get_headers():
-    timestamp = str(int(time.time() * 1000))
-    method = "GET"
-    request_path = "/api/v2/spot/account/assets"
-    body = ""
+BASE_URL = "https://api.bitget.com"
 
-    message = timestamp + method + request_path + body
-    signature = base64.b64encode(
-        hmac.new(API_SECRET.encode(), message.encode(), hashlib.sha256).digest()
-    ).decode()
 
+def get_timestamp():
+    return str(int(time.time() * 1000))
+
+
+def sign(message: str, secret: str) -> str:
+    secret_bytes = secret.encode('utf-8')
+    message_bytes = message.encode('utf-8')
+    signature = hmac.new(secret_bytes, message_bytes, hashlib.sha256).hexdigest()
+    return signature
+
+
+def get_headers(method: str, request_path: str, body: str = "") -> dict:
+    timestamp = get_timestamp()
+    pre_hash = f"{timestamp}{method.upper()}{request_path}{body}"
+    signature = sign(pre_hash, API_SECRET)
     return {
         "ACCESS-KEY": API_KEY,
         "ACCESS-SIGN": signature,
@@ -28,16 +35,31 @@ def get_headers():
         "Content-Type": "application/json"
     }
 
+
+def get_usd_price(symbol):
+    try:
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
+        response = requests.get(url)
+        data = response.json()
+        return data.get(symbol.lower(), {}).get("usd", 0.0)
+    except:
+        return 0.0
+
+
 async def get_portfolio_value():
     try:
-        url = "https://api.bitget.com/api/v2/spot/account/assets"
-        response = requests.get(url, headers=get_headers())
+        method = "GET"
+        endpoint = "/api/v2/spot/account/assets"
+        url = BASE_URL + endpoint
+        headers = get_headers(method, endpoint)
+
+        response = requests.get(url, headers=headers)
         data = response.json()
 
-        coins = data.get("data")
-        if not coins:
+        if not data.get("data"):
             raise ValueError("Bitget API не вернул данные по портфелю")
 
+        coins = data["data"]
         portfolio_lines = []
         total_value = 0.0
         symbols = []
@@ -62,13 +84,4 @@ async def get_portfolio_value():
     except Exception as e:
         import logging
         logging.exception("Ошибка при получении портфеля: %s", e)
-        return f"Ошибка при получении портфеля: {e}", []
-
-def get_usd_price(symbol):
-    try:
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
-        response = requests.get(url)
-        data = response.json()
-        return data.get(symbol.lower(), {}).get("usd", 0.0)
-    except:
-        return 0.0
+        return "Ошибка при получении портфеля", []
