@@ -1,0 +1,12 @@
+services:
+  - type: worker
+    name: yobba-crypto-bot
+    env: python
+    plan: free
+    repo: https://github.com/slashyobba/YobbaCryptoBot
+    branch: master
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.13
