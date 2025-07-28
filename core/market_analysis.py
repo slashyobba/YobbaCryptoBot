@@ -1,79 +1,77 @@
-# core/market_analysis.py
 import requests
-from datetime import datetime, timedelta
-import pytz
+import datetime
 
-COINGECKO_API = "https://api.coingecko.com/api/v3"
-
-def fetch_top_coins(limit=30):
-    url = f"{COINGECKO_API}/coins/markets"
+# Получаем список топ-30 монет
+def get_top_30_coins():
+    url = "https://api.coingecko.com/api/v3/coins/markets"
     params = {
         "vs_currency": "usd",
         "order": "market_cap_desc",
-        "per_page": limit,
+        "per_page": 30,
         "page": 1,
-        "sparkline": False
+        "sparkline": "false"
     }
     response = requests.get(url, params=params)
     return response.json()
 
-def fetch_coin_details(coin_id):
-    url = f"{COINGECKO_API}/coins/{coin_id}"
-    response = requests.get(url)
-    return response.json()
+# Проверяем: новая ли монета (вышла < 3 месяцев назад)
+def is_new_coin(launch_date):
+    try:
+        date = datetime.datetime.strptime(launch_date, "%Y-%m-%dT%H:%M:%S.%fZ")
+        return (datetime.datetime.utcnow() - date).days <= 90
+    except:
+        return False
 
-def is_new_coin(coin_data, threshold_days=90):
-    if 'genesis_date' in coin_data and coin_data['genesis_date']:
-        try:
-            coin_date = datetime.strptime(coin_data['genesis_date'], "%Y-%m-%d")
-            return datetime.now() - coin_date < timedelta(days=threshold_days)
-        except Exception:
-            return False
-    return False
+# Анализ монеты
+def analyze_coin(coin):
+    price_change = coin.get("price_change_percentage_24h", 0)
+    volume_change = coin.get("total_volume", 0)
 
-def analyze_market(user_symbols):
-    top_coins = fetch_top_coins(limit=30)
-    report_lines = ["📊 *Обзор крипторынка (ТОП-30)*\n"]
+    recommendation = ""
+    if price_change > 10:
+        recommendation = "🚀 Растёт — возможно, стоит докупить"
+    elif price_change < -10:
+        recommendation = "📉 Снижается — возможно, время выйти"
+    else:
+        recommendation = "🤏 Без резких движений"
 
-    user_symbols_set = set(symbol.lower() for symbol in user_symbols)
+    if is_new_coin(coin.get("ath_date", "")):
+        recommendation += " 🆕 Новинка"
 
-    for coin in top_coins:
-        name = coin["name"]
-        symbol = coin["symbol"].upper()
-        price = coin["current_price"]
-        change = coin["price_change_percentage_24h"]
-        coin_id = coin["id"]
+    return recommendation
 
-        details = fetch_coin_details(coin_id)
-        is_new = is_new_coin(details)
+# Основная функция анализа
+async def get_market_summary(user_portfolio_symbols=None):
+    coins = get_top_30_coins()
+    user_portfolio_symbols = user_portfolio_symbols or []
 
-        line = f"*{name}* ({symbol}): ${price:.2f} ({change:+.2f}%)"
-        if is_new:
-            line += " 🔥 _Новинка!_"
+    summary = "*📊 Рыночный анализ (топ-30):*\n"
+    for coin in coins:
+        symbol = coin.get("symbol", "").upper()
+        name = coin.get("name", "")
+        price = coin.get("current_price", 0)
+        price_change = coin.get("price_change_percentage_24h", 0)
+        recommendation = analyze_coin(coin)
 
-        report_lines.append(line)
+        summary += f"\n*{name}* ({symbol}) — ${price:.2f} ({price_change:+.2f}%)\n{recommendation}\n"
 
-    # Добавляем отсутствующие в ТОП-30 пользовательские монеты
-    missing = user_symbols_set - set(c['symbol'].lower() for c in top_coins)
-    if missing:
-        report_lines.append("\n📌 *Дополнительно: Ваши монеты вне ТОП-30*")
-        for symbol in missing:
-            url = f"{COINGECKO_API}/coins/{symbol.lower()}"
-            resp = requests.get(url)
-            if resp.status_code != 200:
-                report_lines.append(f"- {symbol.upper()}: данные не найдены.")
-                continue
+    # Отдельный блок по пользовательским монетам
+    if user_portfolio_symbols:
+        summary += "\n\n*🧾 Монеты из портфеля:*\n"
+        all_symbols = [coin["symbol"].upper() for coin in coins]
+        for symbol in user_portfolio_symbols:
+            if symbol.upper() not in all_symbols:
+                try:
+                    response = requests.get(f"https://api.coingecko.com/api/v3/coins/{symbol.lower()}")
+                    data = response.json()
+                    name = data["name"]
+                    price = data["market_data"]["current_price"]["usd"]
+                    price_change = data["market_data"]["price_change_percentage_24h"]
+                    summary += f"\n*{name}* ({symbol.upper()}) — ${price:.2f} ({price_change:+.2f}%)"
+                    if is_new_coin(data.get("genesis_date", "")):
+                        summary += " 🆕 Новинка"
+                    summary += "\n"
+                except:
+                    summary += f"\n*{symbol.upper()}* — не удалось загрузить данные\n"
 
-            coin = resp.json()
-            market = coin.get("market_data", {})
-            name = coin.get("name", symbol.upper())
-            price = market.get("current_price", {}).get("usd", "?")
-            change = market.get("price_change_percentage_24h", "?")
-            is_new = is_new_coin(coin)
-
-            line = f"*{name}* ({symbol.upper()}): ${price} ({change:+.2f}%)"
-            if is_new:
-                line += " 🔥 _Новинка!_"
-            report_lines.append(line)
-
-    return "\n".join(report_lines)
+    return summary
