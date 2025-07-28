@@ -1,77 +1,57 @@
 import requests
-import datetime
 
-# Получаем список топ-30 монет
-def get_top_30_coins():
-    url = "https://api.coingecko.com/api/v3/coins/markets"
-    params = {
-        "vs_currency": "usd",
-        "order": "market_cap_desc",
-        "per_page": 30,
-        "page": 1,
-        "sparkline": "false"
-    }
-    response = requests.get(url, params=params)
-    return response.json()
+COINGECKO_API = "https://api.coingecko.com/api/v3"
 
-# Проверяем: новая ли монета (вышла < 3 месяцев назад)
-def is_new_coin(launch_date):
+async def get_market_summary(portfolio_symbols=None):
     try:
-        date = datetime.datetime.strptime(launch_date, "%Y-%m-%dT%H:%M:%S.%fZ")
-        return (datetime.datetime.utcnow() - date).days <= 90
-    except:
-        return False
+        portfolio_symbols = [s.upper() for s in (portfolio_symbols or [])]
 
-# Анализ монеты
-def analyze_coin(coin):
-    price_change = coin.get("price_change_percentage_24h", 0)
-    volume_change = coin.get("total_volume", 0)
+        coins = requests.get(
+            f"{COINGECKO_API}/coins/markets",
+            params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 30, "page": 1}
+        ).json()
 
-    recommendation = ""
-    if price_change > 10:
-        recommendation = "🚀 Растёт — возможно, стоит докупить"
-    elif price_change < -10:
-        recommendation = "📉 Снижается — возможно, время выйти"
-    else:
-        recommendation = "🤏 Без резких движений"
+        output = {
+            "📈 Растущие монеты": [],
+            "📉 Падающие монеты": [],
+            "⏸️ Стабильные монеты": [],
+            "🆕 Рекомендации (монеты вне портфеля)": []
+        }
 
-    if is_new_coin(coin.get("ath_date", "")):
-        recommendation += " 🆕 Новинка"
+        for coin in coins:
+            symbol = coin["symbol"].upper()
+            name = coin["name"]
+            price = coin.get("current_price", 0)
+            change = coin.get("price_change_percentage_24h", 0) or 0
+            in_portfolio = symbol in portfolio_symbols
+            signal = ""
 
-    return recommendation
+            # Сигналы
+            if change >= 2:
+                signal = "🟢 *Покупать*"
+                output["📈 Растущие монеты"].append(f"{symbol}: ${price:.2f} ({change:+.2f}%) {signal}")
+                if not in_portfolio:
+                    output["🆕 Рекомендации (монеты вне портфеля)"].append(f"{symbol}: растёт — ✅ *Рассмотреть к покупке*")
+            elif change <= -2:
+                signal = "🔴 *Продавать*"
+                output["📉 Падающие монеты"].append(f"{symbol}: ${price:.2f} ({change:+.2f}%) {signal}")
+                if not in_portfolio:
+                    output["🆕 Рекомендации (монеты вне портфеля)"].append(f"{symbol}: падает — ❌ *Избегать покупки*")
+            else:
+                signal = "🟡 Держать"
+                output["⏸️ Стабильные монеты"].append(f"{symbol}: ${price:.2f} ({change:+.2f}%) {signal}")
+                if not in_portfolio:
+                    output["🆕 Рекомендации (монеты вне портфеля)"].append(f"{symbol}: стабилен — ⚠️ *Под наблюдением*")
 
-# Основная функция анализа
-async def get_market_summary(user_portfolio_symbols=None):
-    coins = get_top_30_coins()
-    user_portfolio_symbols = user_portfolio_symbols or []
+        # Формируем финальный текст
+        lines = []
+        for section, coins in output.items():
+            if coins:
+                lines.append(f"*{section}*:")
+                lines.extend([f"- {c}" for c in coins])
+                lines.append("")
 
-    summary = "*📊 Рыночный анализ (топ-30):*\n"
-    for coin in coins:
-        symbol = coin.get("symbol", "").upper()
-        name = coin.get("name", "")
-        price = coin.get("current_price", 0)
-        price_change = coin.get("price_change_percentage_24h", 0)
-        recommendation = analyze_coin(coin)
+        return "\n".join(lines).strip()
 
-        summary += f"\n*{name}* ({symbol}) — ${price:.2f} ({price_change:+.2f}%)\n{recommendation}\n"
-
-    # Отдельный блок по пользовательским монетам
-    if user_portfolio_symbols:
-        summary += "\n\n*🧾 Монеты из портфеля:*\n"
-        all_symbols = [coin["symbol"].upper() for coin in coins]
-        for symbol in user_portfolio_symbols:
-            if symbol.upper() not in all_symbols:
-                try:
-                    response = requests.get(f"https://api.coingecko.com/api/v3/coins/{symbol.lower()}")
-                    data = response.json()
-                    name = data["name"]
-                    price = data["market_data"]["current_price"]["usd"]
-                    price_change = data["market_data"]["price_change_percentage_24h"]
-                    summary += f"\n*{name}* ({symbol.upper()}) — ${price:.2f} ({price_change:+.2f}%)"
-                    if is_new_coin(data.get("genesis_date", "")):
-                        summary += " 🆕 Новинка"
-                    summary += "\n"
-                except:
-                    summary += f"\n*{symbol.upper()}* — не удалось загрузить данные\n"
-
-    return summary
+    except Exception as e:
+        return f"Ошибка при анализе рынка: {e}"
