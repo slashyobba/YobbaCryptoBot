@@ -35,5 +35,5 @@ async def main():
     await scheduler()
 
 # 👇 Вот эта строка у тебя была с ошибкой
-if name == "__main__":
+if __name__ == "__main__":
     asyncio.run(main())
