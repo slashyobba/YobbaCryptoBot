@@ -9,7 +9,7 @@ API_KEY = os.getenv("BITGET_API_KEY")
 API_SECRET = os.getenv("BITGET_API_SECRET")
 API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
-BASE_URL = "https://api.bitget.com"
+BASE_URL = "https://api.bitget.com/api/v2/spot/public/coins"
 
 
 def get_timestamp():
