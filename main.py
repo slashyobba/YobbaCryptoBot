@@ -2,9 +2,13 @@ import os
 import time
 import asyncio
 import logging
+from dotenv import load_dotenv  # 👈 Добавлено для загрузки .env
 from aiogram import Bot, Dispatcher
 from core.bitget_client import get_portfolio_value
 from core.market_analysis import get_market_summary
+
+# Загрузка переменных из .env
+load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
@@ -30,5 +34,6 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await scheduler()
 
+# 👇 Вот эта строка у тебя была с ошибкой
 if name == "__main__":
     asyncio.run(main())
