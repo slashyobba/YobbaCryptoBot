@@ -34,6 +34,11 @@ async def scheduler():
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await scheduler()
+    
+#Будильник
+from keep_alive import keep_alive
+
+keep_alive()
 
 # 👇 Вот эта строка у тебя была с ошибкой
 if __name__ == "__main__":
