@@ -1,22 +1,42 @@
 import requests
 import os
+import time
+import hmac
+import hashlib
+import base64
 
 API_KEY = os.getenv("BITGET_API_KEY")
 API_SECRET = os.getenv("BITGET_API_SECRET")
+API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
-def get_headers():
+BASE_URL = "https://api.bitget.com"
+
+def get_timestamp():
+    return str(int(time.time() * 1000))
+
+def sign(message, secret):
+    mac = hmac.new(secret.encode(), message.encode(), hashlib.sha256)
+    return base64.b64encode(mac.digest()).decode()
+
+def get_headers(method, path, body=""):
+    timestamp = get_timestamp()
+    pre_hash = timestamp + method.upper() + path + body
+    signature = sign(pre_hash, API_SECRET)
+    
     return {
         "ACCESS-KEY": API_KEY,
-        "ACCESS-SIGN": "",
-        "ACCESS-TIMESTAMP": "",
-        "ACCESS-PASSPHRASE": "",
+        "ACCESS-SIGN": signature,
+        "ACCESS-TIMESTAMP": timestamp,
+        "ACCESS-PASSPHRASE": API_PASSPHRASE,
         "Content-Type": "application/json"
     }
 
 async def get_portfolio_value():
     try:
-        url = "https://api.bitget.com/api/v2/spot/account/assets"
-        response = requests.get(url, headers=get_headers())
+        path = "/api/v2/spot/account/assets"
+        url = BASE_URL + path
+        headers = get_headers("GET", path)
+        response = requests.get(url, headers=headers)
         data = response.json()
 
         coins = data.get("data", [])
@@ -42,7 +62,7 @@ async def get_portfolio_value():
         return "\n".join(portfolio_lines), symbols
 
     except Exception as e:
-        return "Ошибка при получении портфеля", []
+        return f"❌ Ошибка при получении портфеля: {e}", []
 
 def get_usd_price(symbol):
     try:
