@@ -9,7 +9,7 @@ API_KEY = os.getenv("BITGET_API_KEY")
 API_SECRET = os.getenv("BITGET_API_SECRET")
 API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
-BASE_URL = "https://api.bitget.com/api/v2/spot/public/coins"
+BASE_URL = "https://api.bitget.com"
 
 
 def get_timestamp():
@@ -49,7 +49,7 @@ def get_usd_price(symbol):
 async def get_portfolio_value():
     try:
         method = "GET"
-        endpoint = "/api/v2/spot/account/assets"
+        endpoint = "/api/v2/spot/public/coins"
         url = BASE_URL + endpoint
         headers = get_headers(method, endpoint)
 
