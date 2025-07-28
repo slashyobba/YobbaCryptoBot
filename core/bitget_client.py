@@ -11,22 +11,13 @@ API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
 BASE_URL = "https://api.bitget.com"
 
+def get_headers(method, request_path, body=""):
+    timestamp = str(int(time.time() * 1000))
+    prehash = f"{timestamp}{method.upper()}{request_path}{body}"
+    signature = base64.b64encode(
+        hmac.new(API_SECRET.encode(), prehash.encode(), hashlib.sha256).digest()
+    ).decode()
 
-def get_timestamp():
-    return str(int(time.time() * 1000))
-
-
-def sign(message: str, secret: str) -> str:
-    secret_bytes = secret.encode('utf-8')
-    message_bytes = message.encode('utf-8')
-    signature = hmac.new(secret_bytes, message_bytes, hashlib.sha256).hexdigest()
-    return signature
-
-
-def get_headers(method: str, request_path: str, body: str = "") -> dict:
-    timestamp = get_timestamp()
-    pre_hash = f"{timestamp}{method.upper()}{request_path}{body}"
-    signature = sign(pre_hash, API_SECRET)
     return {
         "ACCESS-KEY": API_KEY,
         "ACCESS-SIGN": signature,
@@ -34,7 +25,6 @@ def get_headers(method: str, request_path: str, body: str = "") -> dict:
         "ACCESS-PASSPHRASE": API_PASSPHRASE,
         "Content-Type": "application/json"
     }
-
 
 def get_usd_price(symbol):
     try:
@@ -45,14 +35,11 @@ def get_usd_price(symbol):
     except:
         return 0.0
 
-
 async def get_portfolio_value():
     try:
-        method = "GET"
-        endpoint = "/api/v2/spot/public/coins"
-        url = BASE_URL + endpoint
-        headers = get_headers(method, endpoint)
-
+        path = "/api/v2/spot/account/assets"
+        url = BASE_URL + path
+        headers = get_headers("GET", path)
         response = requests.get(url, headers=headers)
         data = response.json()
 
