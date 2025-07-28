@@ -2,8 +2,8 @@ import os
 import time
 import hmac
 import hashlib
-import base64
 import requests
+import base64
 
 API_KEY = os.getenv("BITGET_API_KEY")
 API_SECRET = os.getenv("BITGET_API_SECRET")
@@ -11,13 +11,19 @@ API_PASSPHRASE = os.getenv("BITGET_API_PASSPHRASE")
 
 BASE_URL = "https://api.bitget.com"
 
-def get_headers(method, request_path, body=""):
-    timestamp = str(int(time.time() * 1000))
-    prehash = f"{timestamp}{method.upper()}{request_path}{body}"
-    signature = base64.b64encode(
-        hmac.new(API_SECRET.encode(), prehash.encode(), hashlib.sha256).digest()
-    ).decode()
+def get_timestamp():
+    return str(int(time.time() * 1000))
 
+def sign_request(timestamp, method, request_path, body=""):
+    pre_hash = f"{timestamp}{method}{request_path}{body}"
+    secret_bytes = API_SECRET.encode()
+    message = pre_hash.encode()
+    signature = hmac.new(secret_bytes, message, hashlib.sha256).hexdigest()
+    return signature
+
+def get_headers(method, request_path, body=""):
+    timestamp = get_timestamp()
+    signature = sign_request(timestamp, method, request_path, body)
     return {
         "ACCESS-KEY": API_KEY,
         "ACCESS-SIGN": signature,
@@ -29,24 +35,27 @@ def get_headers(method, request_path, body=""):
 def get_usd_price(symbol):
     try:
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
-        response = requests.get(url)
-        data = response.json()
-        return data.get(symbol.lower(), {}).get("usd", 0.0)
+        res = requests.get(url)
+        return res.json().get(symbol.lower(), {}).get("usd", 0.0)
     except:
         return 0.0
 
 async def get_portfolio_value():
     try:
-        path = "/api/v2/spot/account/assets"
-        url = BASE_URL + path
-        headers = get_headers("GET", path)
-        response = requests.get(url, headers=headers)
-        data = response.json()
+        endpoint = "/api/v2/spot/account/assets"
+        url = BASE_URL + endpoint
+        headers = get_headers("GET", endpoint)
 
-        if not data.get("data"):
+        print("📡 Requesting Bitget portfolio with headers:", headers)
+        res = requests.get(url, headers=headers)
+        print("📥 Bitget API response:", res.status_code, res.text)
+
+        data = res.json()
+        coins = data.get("data", None)
+
+        if not coins:
             raise ValueError("Bitget API не вернул данные по портфелю")
 
-        coins = data["data"]
         portfolio_lines = []
         total_value = 0.0
         symbols = []
